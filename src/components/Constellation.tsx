@@ -11,7 +11,7 @@ interface Props {
 // Position nodes in a circle around center
 function getNodePositions(cx: number, cy: number, r: number, count: number) {
   return Array.from({ length: count }, (_, i) => {
-    const angle = (2 * Math.PI * i) / count - Math.PI / 2;
+    const angle = (2 * Math.PI * (i - 2)) / count - Math.PI / 2;
     return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
   });
 }
