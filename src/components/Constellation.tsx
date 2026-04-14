@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { components } from '../data/components';
 import { scaleIn } from '../animations/variants';
 
@@ -35,15 +35,22 @@ const connections: [number, number][] = [
 ];
 
 export function Constellation({ dark, goToPage }: Props) {
-  const [spotlight, setSpotlight] = useState(-1);
+  const [autoSpotlight, setAutoSpotlight] = useState(-1);
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  // The active node is whichever is hovered, falling back to auto-cycle
+  const active = hovered ?? autoSpotlight;
 
   // Auto-cycle spotlight
   useEffect(() => {
     const timer = setInterval(() => {
-      setSpotlight((prev) => (prev + 1) % components.length);
+      setAutoSpotlight((prev) => (prev + 1) % components.length);
     }, 2500);
     return () => clearInterval(timer);
   }, []);
+
+  const handleEnter = useCallback((i: number) => setHovered(i), []);
+  const handleLeave = useCallback(() => setHovered(null), []);
 
   const cx = 400;
   const cy = 260;
@@ -81,8 +88,16 @@ export function Constellation({ dark, goToPage }: Props) {
       {connections.map(([a, b], i) => {
         const pa = positions[a];
         const pb = positions[b];
-        const isActive =
-          spotlight === a || spotlight === b;
+        const isActive = active === a || active === b;
+        // When hovering, use the hovered node's color; otherwise use the auto-spotlit node's color
+        const activeColor =
+          hovered !== null
+            ? components[hovered].color
+            : active >= 0
+              ? components[active].color
+              : dark
+                ? '#334155'
+                : '#cbd5e1';
 
         return (
           <motion.line
@@ -94,14 +109,15 @@ export function Constellation({ dark, goToPage }: Props) {
             stroke={dark ? '#334155' : '#cbd5e1'}
             strokeDasharray="4 4"
             animate={{
-              strokeOpacity: isActive ? 0.6 : 0.15,
+              strokeOpacity: isActive ? 0.7 : 0.15,
               stroke: isActive
-                ? components[a].color
+                ? activeColor
                 : dark
                   ? '#334155'
                   : '#cbd5e1',
+              strokeWidth: isActive ? 1.5 : 1,
             }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.3 }}
           />
         );
       })}
@@ -151,7 +167,14 @@ export function Constellation({ dark, goToPage }: Props) {
       {/* Component nodes */}
       {components.map((comp, i) => {
         const pos = positions[i];
-        const isActive = spotlight === i;
+        const isActive = active === i;
+        // Dim non-connected nodes when hovering
+        const isConnected =
+          hovered === null ||
+          hovered === i ||
+          connections.some(
+            ([a, b]) => (a === hovered && b === i) || (b === hovered && a === i),
+          );
         const nodeW = 120;
         const nodeH = 56;
 
@@ -161,6 +184,8 @@ export function Constellation({ dark, goToPage }: Props) {
             variants={scaleIn}
             className="cursor-pointer"
             onClick={() => goToPage(comp.id)}
+            onMouseEnter={() => handleEnter(i)}
+            onMouseLeave={handleLeave}
           >
             {/* Glow behind active node */}
             {isActive && (
@@ -186,7 +211,8 @@ export function Constellation({ dark, goToPage }: Props) {
               stroke={comp.color}
               animate={{
                 strokeWidth: isActive ? 2.5 : 1.5,
-                strokeOpacity: isActive ? 1 : 0.5,
+                strokeOpacity: isActive ? 1 : isConnected ? 0.5 : 0.2,
+                opacity: isConnected ? 1 : 0.4,
               }}
               transition={{ duration: 0.3 }}
             />
@@ -202,26 +228,30 @@ export function Constellation({ dark, goToPage }: Props) {
             />
 
             {/* Icon */}
-            <text
+            <motion.text
               x={pos.x}
               y={pos.y - 8}
               textAnchor="middle"
               fontSize="16"
+              animate={{ opacity: isConnected ? 1 : 0.4 }}
+              transition={{ duration: 0.3 }}
             >
               {comp.icon}
-            </text>
+            </motion.text>
 
             {/* Label */}
-            <text
+            <motion.text
               x={pos.x}
               y={pos.y + 12}
               textAnchor="middle"
               fill={isActive ? comp.color : textMain}
               fontSize="10"
               fontWeight="600"
+              animate={{ opacity: isConnected ? 1 : 0.4 }}
+              transition={{ duration: 0.3 }}
             >
               {comp.title}
-            </text>
+            </motion.text>
 
             {/* Tagline (shown when active) */}
             {isActive && (
