@@ -23,6 +23,7 @@ const connections: [number, number][] = [
   [0, 3], // Data Processing <-> Eval: prepares evaluation corpora for benchmarks
   [0, 4], // Data Processing <-> SDG: processed data used in SDG workflows
   [0, 5], // Data Processing <-> Training: creates training-ready datasets
+  [0, 1], // Data Processing <-> AutoML: processed data feeds ML model development
   [1, 3], // AutoML <-> Eval: ML models evaluated and benchmarked
   [2, 3], // AutoRAG <-> Eval: RAG pipelines scored by Eval Hub
   [2, 4], // AutoRAG <-> SDG: synthetic eval data for RAG quality testing
