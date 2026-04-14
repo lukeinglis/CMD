@@ -53,7 +53,7 @@ export const components: ComponentDefinition[] = [
     relationships: [
       'Predictive models complement AutoRAG explanations in AI applications',
       'Trained models can be evaluated and benchmarked with Eval Hub',
-      'Outputs can be exposed as MCP tools for agentic use via ITS',
+      'Roadmap: expose predictive models as MCP tools for agentic workflows',
     ],
   },
   {

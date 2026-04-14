@@ -17,19 +17,20 @@ function getNodePositions(cx: number, cy: number, r: number, count: number) {
 }
 
 // Connections between components (bidirectional, non-pipeline)
+// Indices: 0=Data Processing, 1=AutoML, 2=AutoRAG, 3=Eval, 4=SDG, 5=Training, 6=ITS
 const connections: [number, number][] = [
-  [0, 2], // Data Processing <-> AutoRAG
-  [0, 4], // Data Processing <-> SDG
-  [1, 3], // AutoML <-> Eval
-  [2, 3], // AutoRAG <-> Eval
-  [2, 4], // AutoRAG <-> SDG
-  [3, 4], // Eval <-> SDG
-  [3, 5], // Eval <-> Training
-  [4, 5], // SDG <-> Training
-  [5, 6], // Training <-> ITS
-  [1, 6], // AutoML <-> ITS
-  [2, 6], // AutoRAG <-> ITS
-  [0, 5], // Data Processing <-> Training
+  [0, 2], // Data Processing <-> AutoRAG: structured docs feed RAG pipelines
+  [0, 3], // Data Processing <-> Eval: prepares evaluation corpora for benchmarks
+  [0, 4], // Data Processing <-> SDG: processed data used in SDG workflows
+  [0, 5], // Data Processing <-> Training: creates training-ready datasets
+  [1, 3], // AutoML <-> Eval: ML models evaluated and benchmarked
+  [2, 3], // AutoRAG <-> Eval: RAG pipelines scored by Eval Hub
+  [2, 4], // AutoRAG <-> SDG: synthetic eval data for RAG quality testing
+  [2, 6], // AutoRAG <-> ITS: ITS improves RAG response quality
+  [3, 4], // Eval <-> SDG: SDG generates eval datasets for Eval Hub
+  [3, 5], // Eval <-> Training: trained models validated by Eval Hub
+  [4, 5], // SDG <-> Training: SDG produces fine-tuning data
+  [5, 6], // Training <-> ITS: ITS enhances fine-tuned models
 ];
 
 export function Constellation({ dark, goToPage }: Props) {
