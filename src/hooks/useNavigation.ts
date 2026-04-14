@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { components, TOTAL_PAGES } from '../data/components';
 
-const DEFAULT_INTERVAL = 15;
+const DEFAULT_INTERVAL = 20;
 
 function getPageDuration(page: number, globalInterval: number): number {
   if (page >= 1 && page <= components.length) {
