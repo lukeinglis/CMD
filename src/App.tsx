@@ -265,7 +265,24 @@ function App() {
                 {/* Content layout */}
                 {component.layout === 'stacked' ? (
                   <div className="space-y-3">
-                    {component.image && (
+                    {component.videoId ? (
+                      <motion.div
+                        className={`overflow-hidden rounded-xl ${
+                          d ? 'glass-card' : 'glass-card-light'
+                        }`}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.4 }}
+                      >
+                        <iframe
+                          src={`https://drive.google.com/file/d/${component.videoId}/preview`}
+                          className="w-full aspect-video"
+                          allow="autoplay; encrypted-media"
+                          allowFullScreen
+                          title={`${component.title} demo`}
+                        />
+                      </motion.div>
+                    ) : component.image ? (
                       <motion.div
                         className={`overflow-hidden rounded-xl ${
                           d ? 'glass-card' : 'glass-card-light'
@@ -280,7 +297,7 @@ function App() {
                           className="w-full object-contain"
                         />
                       </motion.div>
-                    )}
+                    ) : null}
                     <ExplanationPanel
                       component={component}
                       darkMode={d}
@@ -289,9 +306,26 @@ function App() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
-                    {/* Image area */}
+                    {/* Media area */}
                     <div className="lg:col-span-5">
-                      {component.image ? (
+                      {component.videoId ? (
+                        <motion.div
+                          className={`overflow-hidden rounded-xl ${
+                            d ? 'glass-card' : 'glass-card-light'
+                          }`}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.4 }}
+                        >
+                          <iframe
+                            src={`https://drive.google.com/file/d/${component.videoId}/preview`}
+                            className="w-full aspect-video"
+                            allow="autoplay; encrypted-media"
+                            allowFullScreen
+                            title={`${component.title} demo`}
+                          />
+                        </motion.div>
+                      ) : component.image ? (
                         <motion.div
                           className={`overflow-hidden rounded-xl ${
                             d ? 'glass-card' : 'glass-card-light'

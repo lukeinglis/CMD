@@ -10,6 +10,8 @@ export interface ComponentDefinition {
   bullets: string[];
   image?: string;
   image2?: string;
+  /** Google Drive file ID for embedded video */
+  videoId?: string;
   layout?: 'side' | 'stacked';
   autoplaySeconds?: number;
   demoUrl?: string;
