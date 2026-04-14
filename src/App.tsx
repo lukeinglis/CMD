@@ -265,7 +265,7 @@ function App() {
                 {/* Content layout */}
                 {component.layout === 'stacked' ? (
                   <div className="space-y-3">
-                    {component.videoId ? (
+                    {component.videoSrc ? (
                       <motion.div
                         className={`overflow-hidden rounded-xl ${
                           d ? 'glass-card' : 'glass-card-light'
@@ -274,11 +274,12 @@ function App() {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.4 }}
                       >
-                        <iframe
-                          src={`https://drive.google.com/file/d/${component.videoId}/preview`}
+                        <video
+                          key={component.videoSrc}
+                          src={`${BASE}${component.videoSrc}`}
                           className="w-full aspect-video"
-                          allow="autoplay; encrypted-media"
-                          allowFullScreen
+                          controls
+                          preload="metadata"
                           title={`${component.title} demo`}
                         />
                       </motion.div>
@@ -308,7 +309,7 @@ function App() {
                   <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
                     {/* Media area */}
                     <div className="lg:col-span-5">
-                      {component.videoId ? (
+                      {component.videoSrc ? (
                         <motion.div
                           className={`overflow-hidden rounded-xl ${
                             d ? 'glass-card' : 'glass-card-light'
@@ -317,11 +318,12 @@ function App() {
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ duration: 0.4 }}
                         >
-                          <iframe
-                            src={`https://drive.google.com/file/d/${component.videoId}/preview`}
+                          <video
+                            key={component.videoSrc}
+                            src={`${BASE}${component.videoSrc}`}
                             className="w-full aspect-video"
-                            allow="autoplay; encrypted-media"
-                            allowFullScreen
+                            controls
+                            preload="metadata"
                             title={`${component.title} demo`}
                           />
                         </motion.div>
