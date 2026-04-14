@@ -178,7 +178,8 @@ export const components: ComponentDefinition[] = [
       'Agentic patterns enabled for tool-calling and multi-step reasoning',
       'Roadmap: integration into Red Hat AI Gateway, reward-based algorithms',
     ],
-    demoUrl: 'https://its-hub-demo.lukeinglis.me',
+    videoSrc: 'videos/its.mp4',
+    demoUrl: 'https://red.ht/its-hub-demo',
     demoLabel: 'Launch ITS Demo',
     demoStatus: 'live',
     relationships: [
