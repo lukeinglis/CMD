@@ -1,106 +1,101 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { components, TOTAL_PAGES } from '../data/components';
+import { components } from '../data/components';
 
-const DEFAULT_INTERVAL = 20;
-
-function getPageDuration(page: number, globalInterval: number): number {
-  if (page >= 1 && page <= components.length) {
-    const comp = components[page - 1];
-    if (comp?.autoplaySeconds) return comp.autoplaySeconds;
-  }
-  return globalInterval;
-}
+const DEFAULT_INTERVAL = 25;
 
 export function useNavigation() {
-  const getInitialPage = () => {
-    const hash = window.location.hash;
-    const match = hash.match(/^#page-(\d+)$/);
-    if (match) {
-      const n = parseInt(match[1], 10);
-      if (n >= 0 && n < TOTAL_PAGES) return n;
-    }
-    return 0;
+  const getInitialSelection = (): number | null => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return null;
+    const comp = components.find((c) => c.slug === hash);
+    return comp ? comp.id : null;
   };
 
-  const [currentPage, setCurrentPage] = useState(getInitialPage);
-  const [direction, setDirection] = useState(0);
+  const [selected, setSelected] = useState<number | null>(getInitialSelection);
   const [autoplay, setAutoplay] = useState(true);
   const [intervalSec, setIntervalSec] = useState(DEFAULT_INTERVAL);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(
-    0 as unknown as ReturnType<typeof setTimeout>,
-  );
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const goToPage = useCallback(
-    (n: number) => {
-      if (n < 0 || n >= TOTAL_PAGES || n === currentPage) return;
-      setAutoplay(false);
-      setDirection(n > currentPage ? 1 : -1);
-      setCurrentPage(n);
-      window.location.hash = `page-${n}`;
-    },
-    [currentPage],
-  );
-
-  const nextPage = useCallback(() => {
+  const selectComponent = useCallback((id: number | null) => {
     setAutoplay(false);
-    goToPage(currentPage + 1);
-  }, [currentPage, goToPage]);
-
-  const prevPage = useCallback(() => {
-    setAutoplay(false);
-    goToPage(currentPage - 1);
-  }, [currentPage, goToPage]);
+    setSelected(id);
+    if (id !== null) {
+      const comp = components.find((c) => c.id === id);
+      window.location.hash = comp ? comp.slug : '';
+    } else {
+      history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const toggleAutoplay = useCallback(() => setAutoplay((prev) => !prev), []);
+  const resumeAutoplay = useCallback(() => setAutoplay(true), []);
 
-  // Autoplay timer with per-page duration, loops back to 0
   useEffect(() => {
     if (!autoplay) {
-      clearTimeout(timerRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
       return;
     }
-    const duration = getPageDuration(currentPage, intervalSec);
     timerRef.current = setTimeout(() => {
-      setCurrentPage((prev) => {
-        const next = prev < TOTAL_PAGES - 1 ? prev + 1 : 0;
-        setDirection(next > prev ? 1 : -1);
-        window.location.hash = `page-${next}`;
-        return next;
+      setSelected((prev) => {
+        const currentIdx = prev === null ? -1 : components.findIndex((c) => c.id === prev);
+        const nextIdx = (currentIdx + 1) % components.length;
+        const next = components[nextIdx];
+        window.location.hash = next.slug;
+        return next.id;
       });
-    }, duration * 1000);
-    return () => clearTimeout(timerRef.current);
-  }, [autoplay, intervalSec, currentPage]);
+    }, intervalSec * 1000);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [autoplay, intervalSec, selected]);
 
-  // Keyboard navigation
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === ' ') {
+      if (e.key === 'Escape') {
         e.preventDefault();
-        nextPage();
+        selectComponent(null);
+        return;
       }
-      if (e.key === 'ArrowLeft') {
+      if (e.key === ' ') {
         e.preventDefault();
-        prevPage();
+        toggleAutoplay();
+        return;
+      }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setAutoplay(false);
+        setSelected((prev) => {
+          const currentIdx = prev === null ? -1 : components.findIndex((c) => c.id === prev);
+          const nextIdx = (currentIdx + 1) % components.length;
+          const next = components[nextIdx];
+          window.location.hash = next.slug;
+          return next.id;
+        });
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setAutoplay(false);
+        setSelected((prev) => {
+          const currentIdx = prev === null ? 0 : components.findIndex((c) => c.id === prev);
+          const nextIdx = (currentIdx - 1 + components.length) % components.length;
+          const next = components[nextIdx];
+          window.location.hash = next.slug;
+          return next.id;
+        });
+        return;
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [nextPage, prevPage]);
-
-  // Current component (1-7) or null for intro/summary
-  const currentComponent =
-    currentPage >= 1 && currentPage <= components.length ? currentPage : null;
+  }, [selectComponent, toggleAutoplay]);
 
   return {
-    currentPage,
-    currentComponent,
-    direction,
-    goToPage,
-    nextPage,
-    prevPage,
-    totalPages: TOTAL_PAGES,
+    selected,
+    selectComponent,
     autoplay,
     toggleAutoplay,
+    resumeAutoplay,
     intervalSec,
     setIntervalSec,
   };

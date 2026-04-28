@@ -6,16 +6,14 @@ export interface ComponentDefinition {
   tagline: string;
   color: string;
   icon: string;
+  iconPath: string;
   description: string;
   bullets: string[];
-  image?: string;
-  image2?: string;
-  /** Local video path (relative to public/) or Google Drive file ID */
   videoSrc?: string;
-  layout?: 'side' | 'stacked';
-  autoplaySeconds?: number;
   demoUrl?: string;
   demoLabel?: string;
   demoStatus: 'live' | 'video' | 'coming-soon';
+  isAnchor?: boolean;
+  stats?: { label: string; value: string }[];
   relationships: string[];
 }
