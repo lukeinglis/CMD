@@ -3,6 +3,41 @@ import { components } from '../data/components';
 
 const DEFAULT_INTERVAL = 25;
 
+function useSwipe(onSwipeLeft: () => void, onSwipeRight: () => void, onSwipeDown?: () => void) {
+  const touchRef = useRef<{ x: number; y: number } | null>(null);
+
+  const onTouchStart = useCallback((e: TouchEvent) => {
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY };
+  }, []);
+
+  const onTouchEnd = useCallback((e: TouchEvent) => {
+    if (!touchRef.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchRef.current.x;
+    const dy = t.clientY - touchRef.current.y;
+    touchRef.current = null;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    if (absDx < 40 && absDy < 40) return;
+    if (absDx > absDy) {
+      if (dx < 0) onSwipeLeft();
+      else onSwipeRight();
+    } else if (dy > 0 && onSwipeDown) {
+      onSwipeDown();
+    }
+  }, [onSwipeLeft, onSwipeRight, onSwipeDown]);
+
+  useEffect(() => {
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [onTouchStart, onTouchEnd]);
+}
+
 export function useNavigation() {
   const getInitialSelection = (): number | null => {
     const hash = window.location.hash.slice(1);
@@ -29,6 +64,30 @@ export function useNavigation() {
 
   const toggleAutoplay = useCallback(() => setAutoplay((prev) => !prev), []);
   const resumeAutoplay = useCallback(() => setAutoplay(true), []);
+
+  const goNext = useCallback(() => {
+    setAutoplay(false);
+    setSelected((prev) => {
+      const currentIdx = prev === null ? -1 : components.findIndex((c) => c.id === prev);
+      const nextIdx = (currentIdx + 1) % components.length;
+      const next = components[nextIdx];
+      window.location.hash = next.slug;
+      return next.id;
+    });
+  }, []);
+
+  const goPrev = useCallback(() => {
+    setAutoplay(false);
+    setSelected((prev) => {
+      const currentIdx = prev === null ? 0 : components.findIndex((c) => c.id === prev);
+      const nextIdx = (currentIdx - 1 + components.length) % components.length;
+      const next = components[nextIdx];
+      window.location.hash = next.slug;
+      return next.id;
+    });
+  }, []);
+
+  const closePanel = useCallback(() => selectComponent(null), [selectComponent]);
 
   useEffect(() => {
     if (!autoplay) {
@@ -63,32 +122,20 @@ export function useNavigation() {
       }
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         e.preventDefault();
-        setAutoplay(false);
-        setSelected((prev) => {
-          const currentIdx = prev === null ? -1 : components.findIndex((c) => c.id === prev);
-          const nextIdx = (currentIdx + 1) % components.length;
-          const next = components[nextIdx];
-          window.location.hash = next.slug;
-          return next.id;
-        });
+        goNext();
         return;
       }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault();
-        setAutoplay(false);
-        setSelected((prev) => {
-          const currentIdx = prev === null ? 0 : components.findIndex((c) => c.id === prev);
-          const nextIdx = (currentIdx - 1 + components.length) % components.length;
-          const next = components[nextIdx];
-          window.location.hash = next.slug;
-          return next.id;
-        });
+        goPrev();
         return;
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectComponent, toggleAutoplay]);
+  }, [selectComponent, toggleAutoplay, goNext, goPrev]);
+
+  useSwipe(goNext, goPrev, closePanel);
 
   return {
     selected,

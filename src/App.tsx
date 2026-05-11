@@ -5,7 +5,7 @@ import { components } from './data/components';
 import { Constellation } from './components/Constellation';
 import { DetailPanel } from './components/DetailPanel';
 
-const IDLE_TIMEOUT_MS = 20000;
+const IDLE_BASE_MS = 30000;
 
 function App() {
   const {
@@ -27,7 +27,9 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [textScale, setTextScale] = useState(() => {
     const saved = localStorage.getItem('cmd-text-scale');
-    return saved ? parseFloat(saved) : 1;
+    if (!saved) return 1;
+    const parsed = parseFloat(saved);
+    return Number.isFinite(parsed) && parsed >= 0.85 && parsed <= 2 ? parsed : 1;
   });
   const [progressKey, setProgressKey] = useState(0);
   const d = darkMode;
@@ -44,10 +46,11 @@ function App() {
 
   // Idle timeout to resume autoplay
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idleMs = Math.max(IDLE_BASE_MS, intervalSec * 1000 + 10000);
   const resetIdleTimer = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => resumeAutoplay(), IDLE_TIMEOUT_MS);
-  }, [resumeAutoplay]);
+    idleTimerRef.current = setTimeout(() => resumeAutoplay(), idleMs);
+  }, [resumeAutoplay, idleMs]);
 
   useEffect(() => {
     if (autoplay) {
@@ -55,8 +58,8 @@ function App() {
       return;
     }
     resetIdleTimer();
-    const events = ['click', 'keydown', 'mousemove'];
-    events.forEach((e) => window.addEventListener(e, resetIdleTimer));
+    const events = ['click', 'keydown', 'mousemove', 'touchstart'];
+    events.forEach((e) => window.addEventListener(e, resetIdleTimer, { passive: true }));
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       events.forEach((e) => window.removeEventListener(e, resetIdleTimer));
@@ -106,7 +109,7 @@ function App() {
       >
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="font-display font-bold tracking-tight" style={{ fontSize: '1.15rem' }}>
+            <h1 className="font-display font-bold tracking-tight whitespace-nowrap" style={{ fontSize: 'clamp(0.85rem, 2.5vw, 1.15rem)' }}>
               <span className="rh-red">Red Hat</span>
               <span className={d ? ' text-slate-100' : ' text-slate-900'}> OpenShift AI</span>
             </h1>
@@ -176,7 +179,7 @@ function App() {
       </header>
 
       {/* Main: constellation + panel */}
-      <div className="flex-1 relative overflow-hidden constellation-bg">
+      <div className={`flex-1 relative overflow-hidden ${d ? 'constellation-bg' : 'constellation-bg-light'}`}>
         <div className="absolute inset-0 flex items-center justify-center p-4">
           <div className="w-full h-full max-w-[1100px] max-h-[800px]">
             <Constellation
@@ -189,7 +192,7 @@ function App() {
 
         <AnimatePresence>
           {component && (
-            <div className="absolute right-0 top-0 bottom-0 flex" style={{ width: 'min(480px, 45%)' }}>
+            <div className="absolute right-0 top-0 bottom-0 z-30 flex w-full md:w-[min(480px,45%)]">
               <DetailPanel
                 key={component.id}
                 component={component}
@@ -208,7 +211,7 @@ function App() {
         }`}
       >
         <div className="max-w-[1400px] mx-auto flex justify-between items-center">
-          <div className={`text-[11px] ${d ? 'text-slate-500' : 'text-slate-400'}`}>
+          <div className={`text-[11px] ${d ? 'text-slate-500' : 'text-slate-400'}`} aria-live="polite">
             {component ? (
               <span style={{ color: component.color }}>{component.icon} {component.title}</span>
             ) : (

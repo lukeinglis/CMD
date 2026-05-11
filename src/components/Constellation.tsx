@@ -101,6 +101,9 @@ export function Constellation({ dark, selected, onSelect }: Props) {
 
     const ctx = canvas.getContext('2d')!;
     let raf = 0;
+    let paused = false;
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const resize = () => {
       const rect = container.getBoundingClientRect();
@@ -122,7 +125,17 @@ export function Constellation({ dark, selected, onSelect }: Props) {
 
     const colors = components.map((c) => hexToRgb(c.color));
 
+    const handleVisibility = () => {
+      paused = document.hidden;
+      if (!paused && !prefersReducedMotion) {
+        raf = requestAnimationFrame(draw);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     const draw = () => {
+      if (paused) return;
+
       const { w, h } = sizeRef.current;
       const active = activeRef.current;
       ctx.clearRect(0, 0, w, h);
@@ -139,8 +152,8 @@ export function Constellation({ dark, selected, onSelect }: Props) {
         const dx = pb.x - pa.x;
         const dy = pb.y - pa.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const nx = -dy / dist;
-        const ny = dx / dist;
+        const nx = -dy / (dist || 1);
+        const ny = dx / (dist || 1);
         const off = Math.min(dist * 0.08, 25);
 
         ctx.beginPath();
@@ -167,20 +180,21 @@ export function Constellation({ dark, selected, onSelect }: Props) {
         const att = attractors[p.home];
         const isHomeActive = active === p.home;
 
-        // Orbital motion around attractor
-        p.angle += p.speed * (isHomeActive ? 1.5 : 1);
-        const targetX = att.x + Math.cos(p.angle) * p.radius;
-        const targetY = att.y + Math.sin(p.angle) * p.radius;
+        if (!prefersReducedMotion) {
+          p.angle += p.speed * (isHomeActive ? 1.5 : 1);
+          const targetX = att.x + Math.cos(p.angle) * p.radius;
+          const targetY = att.y + Math.sin(p.angle) * p.radius;
+          p.vx += (targetX - p.x) * 0.02;
+          p.vy += (targetY - p.y) * 0.02;
+          p.vx *= 0.92;
+          p.vy *= 0.92;
+          p.x += p.vx;
+          p.y += p.vy;
+        } else {
+          p.x = att.x + Math.cos(p.angle) * p.radius;
+          p.y = att.y + Math.sin(p.angle) * p.radius;
+        }
 
-        // Smooth attraction to orbit position
-        p.vx += (targetX - p.x) * 0.02;
-        p.vy += (targetY - p.y) * 0.02;
-        p.vx *= 0.92;
-        p.vy *= 0.92;
-        p.x += p.vx;
-        p.y += p.vy;
-
-        // Draw
         const [r, g, b2] = colors[p.home];
         const alpha = isHomeActive ? p.baseAlpha * 1.8 : p.baseAlpha * 0.7;
         const size = isHomeActive ? p.size * 1.6 : p.size;
@@ -190,7 +204,6 @@ export function Constellation({ dark, selected, onSelect }: Props) {
         ctx.fillStyle = `rgba(${r}, ${g}, ${b2}, ${Math.min(alpha, 1)})`;
         ctx.fill();
 
-        // Soft glow on active particles
         if (isHomeActive && p.size > 1.5) {
           const glowR = size * 3;
           const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
@@ -208,7 +221,6 @@ export function Constellation({ dark, selected, onSelect }: Props) {
         const [r, g, b2] = colors[i];
         const isActive = active === i;
 
-        // Soft ambient glow at attractor center
         const glowSize = isActive ? 40 : 20;
         const centerGrad = ctx.createRadialGradient(att.x, att.y, 0, att.x, att.y, glowSize);
         centerGrad.addColorStop(0, `rgba(${r}, ${g}, ${b2}, ${isActive ? 0.2 : 0.05})`);
@@ -218,7 +230,7 @@ export function Constellation({ dark, selected, onSelect }: Props) {
         ctx.fillStyle = centerGrad;
         ctx.fill();
 
-        if (isActive) {
+        if (isActive && !prefersReducedMotion) {
           const t = Date.now() * 0.002;
           const pulseR = 25 + Math.sin(t) * 10;
           const pulseAlpha = 0.12 + Math.sin(t) * 0.08;
@@ -233,13 +245,21 @@ export function Constellation({ dark, selected, onSelect }: Props) {
         }
       });
 
+      if (prefersReducedMotion) return;
       raf = requestAnimationFrame(draw);
     };
 
-    raf = requestAnimationFrame(draw);
+    // For reduced motion, draw once statically
+    if (prefersReducedMotion) {
+      draw();
+    } else {
+      raf = requestAnimationFrame(draw);
+    }
+
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [dark, initParticles]);
 
@@ -268,8 +288,8 @@ export function Constellation({ dark, selected, onSelect }: Props) {
       </motion.div>
 
       {/* Canvas + label overlay */}
-      <div ref={containerRef} className="flex-1 relative overflow-hidden">
-        <canvas ref={canvasRef} className="absolute inset-0" />
+      <div ref={containerRef} className="flex-1 relative overflow-hidden" role="region" aria-label="Component constellation. Use arrow keys to navigate between components.">
+        <canvas ref={canvasRef} className="absolute inset-0" aria-hidden="true" />
 
         {/* Component labels */}
         {attractorNorm.map((pos, i) => {
@@ -281,6 +301,7 @@ export function Constellation({ dark, selected, onSelect }: Props) {
           return (
             <motion.button
               key={comp.id}
+              aria-label={`${comp.title}: ${comp.tagline}. Status: ${comp.demoStatus === 'live' ? 'Live demo' : comp.demoStatus === 'video' ? 'Video demo' : 'Coming soon'}`}
               className="absolute cursor-pointer flex flex-col items-center text-center"
               style={{
                 left: `${pos.nx * 100}%`,
