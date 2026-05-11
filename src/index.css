@@ -145,6 +145,11 @@
   }
 }
 
+@keyframes segmented-ring-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 @keyframes ambientShift {
   0% { opacity: 0.6; transform: translate(0, 0); }
   100% { opacity: 1; transform: translate(20px, -10px); }

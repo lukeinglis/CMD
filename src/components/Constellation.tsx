@@ -14,16 +14,14 @@ const connections: [number, number][] = [
   [3, 4], [3, 5], [4, 5], [5, 6],
 ];
 
-// Layout positions for attractors (normalized 0-1)
-// Ordered by component index (0=Data Processing, 1=AutoML, ... 6=ITS Hub)
 const attractorNorm: { nx: number; ny: number }[] = [
-  { nx: 0.15, ny: 0.58 },  // 0: Data Processing
-  { nx: 0.24, ny: 0.28 },  // 1: AutoML (anchor)
-  { nx: 0.50, ny: 0.20 },  // 2: AutoRAG (anchor)
-  { nx: 0.76, ny: 0.28 },  // 3: Eval Hub (anchor)
-  { nx: 0.38, ny: 0.65 },  // 4: SDG Hub
-  { nx: 0.62, ny: 0.65 },  // 5: Training Hub
-  { nx: 0.85, ny: 0.58 },  // 6: ITS Hub
+  { nx: 0.15, ny: 0.58 },
+  { nx: 0.24, ny: 0.28 },
+  { nx: 0.50, ny: 0.20 },
+  { nx: 0.76, ny: 0.28 },
+  { nx: 0.38, ny: 0.65 },
+  { nx: 0.62, ny: 0.65 },
+  { nx: 0.85, ny: 0.58 },
 ];
 
 const PARTICLE_COUNT = 280;
@@ -41,19 +39,50 @@ interface Particle {
   radius: number;
 }
 
+interface SignalDot {
+  connectionIdx: number;
+  progress: number;
+  speed: number;
+  sourceIdx: number;
+  targetIdx: number;
+}
+
 function hexToRgb(hex: string): [number, number, number] {
   const v = parseInt(hex.slice(1), 16);
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 }
 
+function quadBezierPoint(
+  t: number,
+  p0x: number, p0y: number,
+  cpx: number, cpy: number,
+  p1x: number, p1y: number,
+): [number, number] {
+  const mt = 1 - t;
+  return [
+    mt * mt * p0x + 2 * mt * t * cpx + t * t * p1x,
+    mt * mt * p0y + 2 * mt * t * cpy + t * t * p1y,
+  ];
+}
+
+const RING_RADIUS = 24;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
 export function Constellation({ dark, selected, onSelect }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const particlesRef = useRef<Particle[]>([]);
+  const signalDotsRef = useRef<SignalDot[]>([]);
   const sizeRef = useRef({ w: 0, h: 0 });
   const activeRef = useRef(-1);
   const [spotlight, setSpotlight] = useState(-1);
   const [hovered, setHovered] = useState<number | null>(null);
+
+  const prefersReducedMotion = useRef(
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false,
+  ).current;
 
   const activeIdx = selected !== null
     ? components.findIndex((c) => c.id === selected)
@@ -69,7 +98,6 @@ export function Constellation({ dark, selected, onSelect }: Props) {
     return () => clearInterval(timer);
   }, [selected]);
 
-  // Initialize particles
   const initParticles = useCallback((w: number, h: number) => {
     const particles: Particle[] = [];
     for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -93,7 +121,6 @@ export function Constellation({ dark, selected, onSelect }: Props) {
     particlesRef.current = particles;
   }, []);
 
-  // Canvas setup and animation loop
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -102,8 +129,6 @@ export function Constellation({ dark, selected, onSelect }: Props) {
     const ctx = canvas.getContext('2d')!;
     let raf = 0;
     let paused = false;
-
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const resize = () => {
       const rect = container.getBoundingClientRect();
@@ -142,11 +167,10 @@ export function Constellation({ dark, selected, onSelect }: Props) {
 
       const attractors = attractorNorm.map((a) => ({ x: a.nx * w, y: a.ny * h }));
 
-      // Draw connection curves
-      connections.forEach(([a, b]) => {
+      // Pre-compute connection geometry
+      const connectionGeom = connections.map(([a, b]) => {
         const pa = attractors[a];
         const pb = attractors[b];
-        const isActive = active === a || active === b;
         const midX = (pa.x + pb.x) / 2;
         const midY = (pa.y + pb.y) / 2;
         const dx = pb.x - pa.x;
@@ -155,17 +179,38 @@ export function Constellation({ dark, selected, onSelect }: Props) {
         const nx = -dy / (dist || 1);
         const ny = dx / (dist || 1);
         const off = Math.min(dist * 0.08, 25);
+        return { pa, pb, cpx: midX + nx * off, cpy: midY + ny * off };
+      });
+
+      // Draw connection curves
+      connectionGeom.forEach((geom, idx) => {
+        const [a, b] = connections[idx];
+        const isActive = active === a || active === b;
 
         ctx.beginPath();
-        ctx.moveTo(pa.x, pa.y);
-        ctx.quadraticCurveTo(midX + nx * off, midY + ny * off, pb.x, pb.y);
+        ctx.moveTo(geom.pa.x, geom.pa.y);
+        ctx.quadraticCurveTo(geom.cpx, geom.cpy, geom.pb.x, geom.pb.y);
 
-        if (isActive) {
-          const [r, g, b2] = colors[active >= 0 ? active : 0];
-          ctx.strokeStyle = `rgba(${r}, ${g}, ${b2}, 0.25)`;
+        if (isActive && active >= 0) {
+          const [r1, g1, b1] = colors[active];
+          const otherIdx = active === a ? b : a;
+          const [r2, g2, b2] = colors[otherIdx];
+
+          const grad = ctx.createLinearGradient(
+            attractors[a].x, attractors[a].y,
+            attractors[b].x, attractors[b].y,
+          );
+          if (active === a) {
+            grad.addColorStop(0, `rgba(${r1}, ${g1}, ${b1}, 0.35)`);
+            grad.addColorStop(1, `rgba(${r2}, ${g2}, ${b2}, 0.12)`);
+          } else {
+            grad.addColorStop(0, `rgba(${r2}, ${g2}, ${b2}, 0.12)`);
+            grad.addColorStop(1, `rgba(${r1}, ${g1}, ${b1}, 0.35)`);
+          }
+          ctx.strokeStyle = grad;
           ctx.lineWidth = 1.5;
-          ctx.shadowColor = `rgba(${r}, ${g}, ${b2}, 0.3)`;
-          ctx.shadowBlur = 8;
+          ctx.shadowColor = `rgba(${r1}, ${g1}, ${b1}, 0.2)`;
+          ctx.shadowBlur = 6;
         } else {
           ctx.strokeStyle = dark ? 'rgba(30, 41, 59, 0.2)' : 'rgba(203, 213, 225, 0.15)';
           ctx.lineWidth = 0.5;
@@ -175,6 +220,72 @@ export function Constellation({ dark, selected, onSelect }: Props) {
         ctx.shadowBlur = 0;
       });
 
+      // Signal dots: spawn, update, draw
+      if (active >= 0 && !prefersReducedMotion) {
+        connections.forEach(([a, b], idx) => {
+          if (a !== active && b !== active) return;
+          const dotsOnConn = signalDotsRef.current.filter((d) => d.connectionIdx === idx);
+          if (dotsOnConn.length < 3) {
+            const isSource = a === active;
+            signalDotsRef.current.push({
+              connectionIdx: idx,
+              progress: -(Math.random() * 0.3),
+              speed: 0.004 + Math.random() * 0.003,
+              sourceIdx: isSource ? a : b,
+              targetIdx: isSource ? b : a,
+            });
+          }
+        });
+      }
+
+      signalDotsRef.current = signalDotsRef.current.filter((d) => d.progress <= 1.1);
+
+      signalDotsRef.current.forEach((dot) => {
+        dot.progress += dot.speed;
+        if (dot.progress < 0) return;
+
+        let alpha = 1;
+        if (dot.progress < 0.1) alpha = dot.progress / 0.1;
+        if (dot.progress > 0.9) alpha = (1 - dot.progress) / 0.1;
+        alpha = Math.max(0, Math.min(1, alpha));
+        if (alpha <= 0) return;
+
+        const geom = connectionGeom[dot.connectionIdx];
+        const [ca, cb] = connections[dot.connectionIdx];
+        const p0 = dot.sourceIdx === ca ? geom.pa : geom.pb;
+        const p1 = dot.sourceIdx === ca ? geom.pb : geom.pa;
+        const [cr, cg, cb2] = colors[dot.sourceIdx];
+
+        // Trail
+        const trailOffsets = [0.03, 0.06, 0.09];
+        const trailAlphas = [0.45, 0.2, 0.08];
+        const trailSizes = [2, 1.5, 1];
+        trailOffsets.forEach((offset, ti) => {
+          const tp = Math.max(0, dot.progress - offset);
+          const [tx, ty] = quadBezierPoint(tp, p0.x, p0.y, geom.cpx, geom.cpy, p1.x, p1.y);
+          ctx.beginPath();
+          ctx.arc(tx, ty, trailSizes[ti], 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb2}, ${alpha * trailAlphas[ti]})`;
+          ctx.fill();
+        });
+
+        // Main dot
+        const [mx, my] = quadBezierPoint(dot.progress, p0.x, p0.y, geom.cpx, geom.cpy, p1.x, p1.y);
+        ctx.beginPath();
+        ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb2}, ${alpha * 0.9})`;
+        ctx.fill();
+
+        // Glow
+        const glowGrad = ctx.createRadialGradient(mx, my, 0, mx, my, 8);
+        glowGrad.addColorStop(0, `rgba(${cr}, ${cg}, ${cb2}, ${alpha * 0.25})`);
+        glowGrad.addColorStop(1, `rgba(${cr}, ${cg}, ${cb2}, 0)`);
+        ctx.beginPath();
+        ctx.arc(mx, my, 8, 0, Math.PI * 2);
+        ctx.fillStyle = glowGrad;
+        ctx.fill();
+      });
+
       // Update and draw particles
       particlesRef.current.forEach((p) => {
         const att = attractors[p.home];
@@ -182,8 +293,9 @@ export function Constellation({ dark, selected, onSelect }: Props) {
 
         if (!prefersReducedMotion) {
           p.angle += p.speed * (isHomeActive ? 1.5 : 1);
-          const targetX = att.x + Math.cos(p.angle) * p.radius;
-          const targetY = att.y + Math.sin(p.angle) * p.radius;
+          const activeRadius = isHomeActive ? p.radius * 1.2 : p.radius;
+          const targetX = att.x + Math.cos(p.angle) * activeRadius;
+          const targetY = att.y + Math.sin(p.angle) * activeRadius;
           p.vx += (targetX - p.x) * 0.02;
           p.vy += (targetY - p.y) * 0.02;
           p.vx *= 0.92;
@@ -249,7 +361,6 @@ export function Constellation({ dark, selected, onSelect }: Props) {
       raf = requestAnimationFrame(draw);
     };
 
-    // For reduced motion, draw once statically
     if (prefersReducedMotion) {
       draw();
     } else {
@@ -261,7 +372,7 @@ export function Constellation({ dark, selected, onSelect }: Props) {
       ro.disconnect();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [dark, initParticles]);
+  }, [dark, initParticles, prefersReducedMotion]);
 
   const d = dark;
 
@@ -296,7 +407,6 @@ export function Constellation({ dark, selected, onSelect }: Props) {
           const comp = components[i];
           const isActive = activeIdx === i;
           const isSelected = selected === comp.id;
-          const isAnchor = !!comp.isAnchor;
 
           return (
             <motion.button
@@ -306,129 +416,87 @@ export function Constellation({ dark, selected, onSelect }: Props) {
               style={{
                 left: `${pos.nx * 100}%`,
                 top: `${pos.ny * 100}%`,
-                transform: 'translate(-50%, -50%)',
+                transform: 'translate(-50%, -55%)',
                 zIndex: isActive ? 20 : 10,
               }}
               onClick={() => onSelect(comp.id)}
               onMouseEnter={() => setHovered(i)}
               onMouseLeave={() => setHovered(null)}
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={prefersReducedMotion ? {} : { scale: 1.05 }}
+              whileTap={prefersReducedMotion ? {} : { scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
             >
-              {/* Backdrop (appears on hover/active) */}
-              <div
-                className="absolute inset-[-12px] rounded-2xl transition-all duration-300"
-                style={{
-                  background: isActive
-                    ? `radial-gradient(ellipse, ${comp.color}12, transparent 70%)`
-                    : 'transparent',
-                  backdropFilter: isActive ? 'blur(4px)' : 'none',
-                }}
-              />
-
-              <div className="relative z-10">
-                {/* Icon */}
-                <div
-                  className="mx-auto mb-1 flex items-center justify-center rounded-xl transition-all duration-300"
+              {/* Scanner ring */}
+              <div className="relative flex items-center justify-center" style={{ width: 56, height: 56 }}>
+                <svg
+                  width="56"
+                  height="56"
+                  viewBox="0 0 56 56"
+                  className="absolute inset-0"
                   style={{
-                    width: isAnchor ? 40 : 32,
-                    height: isAnchor ? 40 : 32,
-                    background: `${comp.color}${isActive ? '25' : '10'}`,
-                    border: `1.5px solid ${comp.color}${isActive ? '50' : '20'}`,
-                    boxShadow: isActive ? `0 0 20px ${comp.color}25` : 'none',
+                    opacity: isActive ? 1 : 0,
+                    transition: 'opacity 400ms ease',
+                    animation: isActive && !prefersReducedMotion ? 'segmented-ring-spin 14s linear infinite' : 'none',
                   }}
+                  aria-hidden="true"
                 >
-                  <svg
-                    width={isAnchor ? 20 : 16}
-                    height={isAnchor ? 20 : 16}
-                    viewBox="0 0 24 24"
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r={RING_RADIUS}
                     fill="none"
                     stroke={comp.color}
-                    strokeWidth="2"
+                    strokeWidth="1.5"
+                    strokeDasharray={`${RING_CIRCUMFERENCE * 0.19} ${RING_CIRCUMFERENCE * 0.06}`}
                     strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d={comp.iconPath} />
-                  </svg>
-                </div>
-
-                {/* Title */}
-                <span
-                  className="font-display font-bold block leading-tight transition-colors duration-300"
-                  style={{
-                    fontSize: isAnchor ? 'clamp(12px, 1.2vw, 15px)' : 'clamp(10px, 1vw, 13px)',
-                    color: isActive ? comp.color : d ? '#e2e8f0' : '#1e293b',
-                    textShadow: d ? '0 1px 8px rgba(0,0,0,0.8)' : 'none',
-                  }}
-                >
-                  {comp.title}
-                </span>
-
-                {/* Subtitle on active */}
-                {isActive && (
-                  <motion.span
-                    className="block mt-0.5"
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 0.7, y: 0 }}
-                    style={{
-                      fontSize: 'clamp(8px, 0.7vw, 10px)',
-                      color: d ? '#94a3b8' : '#64748b',
-                      textShadow: d ? '0 1px 6px rgba(0,0,0,0.8)' : 'none',
-                    }}
-                  >
-                    {comp.tagline.length > 35 ? comp.tagline.slice(0, 35) + '...' : comp.tagline}
-                  </motion.span>
-                )}
-
-                {/* Status */}
-                <div className="flex items-center justify-center gap-1 mt-1">
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{
-                      backgroundColor: comp.demoStatus === 'coming-soon'
-                        ? (d ? '#334155' : '#cbd5e1')
-                        : comp.color,
-                      boxShadow: comp.demoStatus !== 'coming-soon' ? `0 0 4px ${comp.color}` : 'none',
-                    }}
+                    opacity="0.7"
                   />
-                  <span
-                    className="font-medium"
-                    style={{
-                      fontSize: 'clamp(7px, 0.6vw, 9px)',
-                      color: comp.demoStatus === 'coming-soon'
-                        ? (d ? '#475569' : '#94a3b8')
-                        : comp.color,
-                    }}
-                  >
-                    {comp.demoStatus === 'live' ? 'Live' : comp.demoStatus === 'video' ? 'Demo' : 'Soon'}
-                  </span>
-                </div>
+                </svg>
 
-                {/* Anchor badge */}
-                {comp.isAnchor && (
-                  <span
-                    className="inline-block mt-1 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest"
-                    style={{
-                      fontSize: '6px',
-                      background: '#EE000015',
-                      color: '#EE0000',
-                      border: '1px solid #EE000025',
-                    }}
-                  >
-                    Anchor
-                  </span>
+                {/* Icon */}
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={comp.color}
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{
+                    opacity: isActive ? 1 : 0.45,
+                    transition: 'opacity 400ms ease',
+                    filter: isActive ? `drop-shadow(0 0 6px ${comp.color}80)` : 'none',
+                  }}
+                  aria-hidden="true"
+                >
+                  <path d={comp.iconPath} />
+                </svg>
+
+                {/* Selected pulse ring */}
+                {isSelected && (
+                  <motion.div
+                    className="absolute inset-0 rounded-full pointer-events-none"
+                    style={{ border: `1px solid ${comp.color}` }}
+                    animate={{ scale: [1, 1.5], opacity: [0.6, 0] }}
+                    transition={{ repeat: Infinity, duration: 1.5, ease: 'easeOut' }}
+                  />
                 )}
               </div>
 
-              {/* Selected ring */}
-              {isSelected && (
-                <motion.div
-                  className="absolute inset-[-16px] rounded-2xl pointer-events-none"
-                  style={{ border: `1.5px solid ${comp.color}40` }}
-                  animate={{ opacity: [0.4, 0.8, 0.4] }}
-                  transition={{ repeat: Infinity, duration: 2 }}
-                />
-              )}
+              {/* Title */}
+              <span
+                className="font-display font-semibold whitespace-nowrap mt-1"
+                style={{
+                  fontSize: 'clamp(9px, 0.85vw, 11px)',
+                  letterSpacing: '0.02em',
+                  color: isActive ? comp.color : d ? '#94a3b8' : '#475569',
+                  textShadow: isActive ? `0 0 12px ${comp.color}60` : d ? '0 1px 6px rgba(0,0,0,0.9)' : 'none',
+                  transition: 'color 400ms ease, text-shadow 400ms ease',
+                }}
+              >
+                {comp.title}
+              </span>
             </motion.button>
           );
         })}
